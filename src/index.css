@@ -3,17 +3,17 @@
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 
 :root {
-  --bg:     #04070d;
-  --card:   #080f1a;
-  --card2:  #0c1624;
-  --b1:     #132035;
-  --b2:     #1a2d4a;
-  --accent: #00d4ff;
-  --green:  #00ff88;
-  --red:    #ff3b5c;
-  --text:   #e2f0ff;
-  --muted:  #6b8aaa;
-  --muted2: #3d5a7a;
+  --bg:      #04070d;
+  --card:    #080f1a;
+  --card2:   #0c1624;
+  --b1:      #132035;
+  --b2:      #1a2d4a;
+  --accent:  #00d4ff;
+  --green:   #00ff88;
+  --red:     #ff3b5c;
+  --text:    #e2f0ff;
+  --muted:   #6b8aaa;
+  --muted2:  #3d5a7a;
 }
 
 html, body, #root { height:100%; }
@@ -44,6 +44,7 @@ body::after {
   background-size: 52px 52px;
   animation: gridShift 30s linear infinite;
 }
+
 /* BG ambient glow */
 .bg-glow {
   position:fixed; z-index:0;
@@ -54,7 +55,26 @@ body::after {
   animation: glowMove 20s ease-in-out infinite alternate;
 }
 
-/* NAV */
+/* --- ANIMATIONS --- */
+
+/* Animasi untuk Progress Bar Auto-Close */
+@keyframes shrink {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+/* Animasi Spinner Loading */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes blink      { 0%,100%{opacity:1} 50%{opacity:.3} }
+@keyframes gridShift  { to { background-position:52px 52px; } }
+@keyframes glowMove   { to { transform:translate(75vw, 75vh); } }
+
+/* --- UI COMPONENTS --- */
+
 .nav {
   position:sticky; top:0; z-index:100;
   display:flex; align-items:center; justify-content:space-between;
@@ -71,6 +91,7 @@ body::after {
   display:flex; align-items:center; gap:9px;
   user-select:none;
 }
+
 .logo-dot {
   width:8px; height:8px; border-radius:50%;
   background:var(--accent);
@@ -78,32 +99,7 @@ body::after {
   flex-shrink:0;
 }
 
-.nav-tabs {
-  display:flex; gap:2px;
-  background:var(--card); border:1px solid var(--b2);
-  border-radius:10px; padding:3px;
-}
-.nav-tab {
-  padding:8px 20px; border-radius:7px;
-  font-family:'IBM Plex Mono',monospace;
-  font-size:12px; font-weight:700; letter-spacing:.5px;
-  color:var(--muted); border:none; background:none;
-  cursor:pointer; transition:.2s;
-}
-.nav-tab:hover  { color:var(--text); }
-.nav-tab.active { background:var(--accent); color:var(--bg); }
-
-.net-badge {
-  display:flex; align-items:center; gap:6px;
-  padding:7px 13px;
-  background:var(--card); border:1px solid var(--b2);
-  border-radius:8px; font-size:12px; font-weight:700; color:var(--green);
-}
-.net-dot {
-  width:6px; height:6px; border-radius:50%;
-  background:var(--green); animation:blink 2.5s infinite;
-}
-
+/* Tombol & Tabs */
 .connect-btn {
   padding:8px 20px;
   background:transparent; border:1px solid var(--accent);
@@ -114,25 +110,11 @@ body::after {
 }
 .connect-btn:hover     { background:var(--accent); color:var(--bg); }
 .connect-btn.connected { border-color:var(--green); color:var(--green); }
-.connect-btn.connected:hover { background:var(--green); color:var(--bg); }
-
-/* MAIN */
-.main {
-  position:relative; z-index:1;
-  max-width:500px; margin:36px auto;
-  padding:0 16px 80px;
-}
 
 /* SCROLLBAR */
 ::-webkit-scrollbar { width:5px; }
 ::-webkit-scrollbar-track { background:var(--card); }
 ::-webkit-scrollbar-thumb { background:var(--b2); border-radius:3px; }
-
-/* KEYFRAMES */
-@keyframes blink     { 0%,100%{opacity:1} 50%{opacity:.3} }
-@keyframes spin      { to { transform:rotate(360deg); } }
-@keyframes gridShift { to { background-position:52px 52px; } }
-@keyframes glowMove  { to { transform:translate(75vw, 75vh); } }
 
 /* RESET */
 button { font-family:inherit; }
