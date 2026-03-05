@@ -10,13 +10,35 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build"
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
   },
   "browserslist": {
-    "production": [">0.2%", "not dead", "not ie 11"],
-    "development": ["last 1 chrome version"]
+    "production": [
+      ">0.5%",
+      "not dead",
+      "not op_mini all",
+      "not ie 11",
+      "supports bigint"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   },
   "eslintConfig": {
-    "extends": ["react-app"]
+    "extends": [
+      "react-app"
+    ],
+    "env": {
+      "browser": true,
+      "es2020": true,
+      "node": true
+    },
+    "rules": {
+      "no-undef": "off"
+    }
   }
 }
