@@ -10,6 +10,7 @@ export const EXPLORER  = 'https://testnet-explorer.autheo.com';
 export const FACTORY = '0x2677B46B2E3584b7504D95e05E555e00C6abD665';
 export const WTHEO   = '0x9c52C2fFA611066858Cd2d8DB724c659B561c41D';
 export const ROUTER  = '0xd8A7cEc4c9FCB80ab393e9936aD1C01dbE6CeDCB';
+export const CONTRACTS = { factory: FACTORY, wtheo: WTHEO, router: ROUTER };
 
 // ── Token list ────────────────────────────────────────
 // WTHEO disembunyikan dari UI — Router otomatis wrap THEO saat swap
