@@ -30,64 +30,104 @@ export default function LiquidityPanel({ signer, address, readProvider }) {
 //  ADD LIQUIDITY PANE
 // ══════════════════════════════════════════════════════
 function AddPane({ signer, address, readProvider }) {
-  const [tokA, setTokA] = useState(TOKENS[0]);
-  const [tokB, setTokB] = useState(TOKENS[2]);
-  const [amtA, setAmtA] = useState('');
-  const [amtB, setAmtB] = useState('');
-  const [balA, setBalA] = useState('—');
-  const [balB, setBalB] = useState('—');
-  const [poolInfo, setPoolInfo] = useState(null);
+  const [tokA,     setTokA]     = useState(TOKENS[0]);
+  const [tokB,     setTokB]     = useState(TOKENS[2]);
+  const [amtA,     setAmtA]     = useState('');
+  const [amtB,     setAmtB]     = useState('');
+  const [balARaw,  setBalARaw]  = useState(0n);  // raw BigInt
+  const [balBRaw,  setBalBRaw]  = useState(0n);
+  const [balA,     setBalA]     = useState('—');
+  const [balB,     setBalB]     = useState('—');
+  const [poolInfo, setPoolInfo] = useState(null); // null | { isNew, rate, share, lpEst }
+  const [pct,      setPct]      = useState(10);   // % slider for new pool (1-25)
   const [tokModal, setTokModal] = useState(false);
   const [side,     setSide]     = useState('A');
   const [tx,       setTx]       = useState({ state: TX.IDLE, hash:'', msg:'' });
   const [busy,     setBusy]     = useState(false);
 
-  const loadBal = useCallback(async (tok, setter) => {
-    if (!address) { setter('—'); return; }
+  // ── load balance ──────────────────────────────────
+  const loadBal = useCallback(async (tok, setRaw, setFmt) => {
+    if (!address) { setRaw(0n); setFmt('—'); return; }
     const b = await getTokenBalance(tok, address, readProvider());
-    setter(fmtUnits(b, tok.decimals));
+    setRaw(b);
+    setFmt(fmtUnits(b, tok.decimals));
   }, [address, readProvider]);
 
-  useEffect(() => { loadBal(tokA, setBalA); }, [tokA, loadBal]);
-  useEffect(() => { loadBal(tokB, setBalB); }, [tokB, loadBal]);
+  useEffect(() => { loadBal(tokA, setBalARaw, setBalA); }, [tokA, loadBal]);
+  useEffect(() => { loadBal(tokB, setBalBRaw, setBalB); }, [tokB, loadBal]);
 
-  const calcPaired = useCallback(async (valA) => {
+  // ── check pool & calc paired amount ──────────────
+  const calcPaired = useCallback(async (valA, tA = tokA, tB = tokB) => {
     setPoolInfo(null);
     if (!valA || parseFloat(valA) <= 0) return;
-    if (toAddr(tokA) === toAddr(tokB)) return;
+    if (toAddr(tA) === toAddr(tB)) return;
     try {
       const p       = readProvider();
       const factory = new ethers.Contract(FACTORY, FACTORY_ABI, p);
-      const pa      = await factory.getPair(toAddr(tokA), toAddr(tokB));
-      if (pa === ethers.ZeroAddress) { setPoolInfo({ isNew: true }); return; }
+      const pa      = await factory.getPair(toAddr(tA), toAddr(tB));
 
+      // ── NEW POOL: bebas isi Token B ───────────────
+      if (pa === ethers.ZeroAddress) {
+        setPoolInfo({ isNew: true });
+        // amtB stays as user input — don't overwrite
+        return;
+      }
+
+      // ── EXISTING POOL: auto-hitung Token B ────────
       const pair    = new ethers.Contract(pa, PAIR_ABI, p);
       const [r0,r1] = await pair.getReserves();
       const t0      = await pair.token0();
-      const [rA,rB] = t0.toLowerCase() === toAddr(tokA).toLowerCase() ? [r0,r1] : [r1,r0];
+      const [rA,rB] = t0.toLowerCase() === toAddr(tA).toLowerCase() ? [r0,r1] : [r1,r0];
       const totalLP = await pair.totalSupply();
 
-      const weiA   = ethers.parseUnits(valA, tokA.decimals);
-      const weiB   = weiA * rB / rA;
-      const bFmt   = parseFloat(ethers.formatUnits(weiB, tokB.decimals)).toFixed(6);
-      setAmtB(bFmt);
+      const weiA  = ethers.parseUnits(valA, tA.decimals);
+      const weiB  = rA > 0n ? weiA * rB / rA : 0n;
+      const bFmt  = parseFloat(ethers.formatUnits(weiB, tB.decimals)).toFixed(6);
+      setAmtB(bFmt); // ← auto-set Token B
 
-      const lpEst  = totalLP > 0n ? weiA * totalLP / rA : 0n;
-      const share  = totalLP > 0n ? Number(lpEst) / (Number(totalLP) + Number(lpEst)) * 100 : 100;
+      const lpEst = totalLP > 0n ? weiA * totalLP / rA : 0n;
+      const share = totalLP > 0n
+        ? Number(lpEst) / (Number(totalLP) + Number(lpEst)) * 100
+        : 100;
+      const decDiff = 10 ** (tA.decimals - tB.decimals);
 
-      // rate: adjust for decimal difference
-      const decDiff = 10 ** (tokA.decimals - tokB.decimals);
       setPoolInfo({
         isNew: false,
-        rate:  `1 ${tokA.symbol} = ${(Number(rB) / Number(rA) * decDiff).toFixed(6)} ${tokB.symbol}`,
+        rate:  `1 ${tA.symbol} = ${(Number(rB) / Number(rA) * decDiff).toFixed(6)} ${tB.symbol}`,
         share: share.toFixed(4) + '%',
         lpEst: fmtUnits(lpEst, 18),
       });
     } catch { setPoolInfo(null); }
   }, [tokA, tokB, readProvider]);
 
-  const handleAmtA = (v) => { setAmtA(v); calcPaired(v); };
+  // ── % slider handler (new pool only) ─────────────
+  const handlePct = (p) => {
+    setPct(p);
+    if (balARaw > 0n) {
+      // reserve a bit for gas if native
+      let usable = balARaw;
+      if (tokA.address === 'NATIVE') {
+        const gas = ethers.parseEther('0.05');
+        usable = usable > gas ? usable - gas : 0n;
+      }
+      const slice = usable * BigInt(p) / 100n;
+      const v = parseFloat(ethers.formatUnits(slice, tokA.decimals)).toFixed(6);
+      setAmtA(v);
+      calcPaired(v);
+    }
+  };
 
+  const handleAmtA = (v) => {
+    setAmtA(v);
+    calcPaired(v);
+  };
+
+  const handleAmtB = (v) => {
+    // only editable when pool is new
+    if (poolInfo?.isNew || !poolInfo) setAmtB(v);
+  };
+
+  // ── do add liquidity ──────────────────────────────
   const doAdd = async () => {
     if (!signer || !amtA || !amtB) return;
     setBusy(true);
@@ -96,9 +136,6 @@ function AddPane({ signer, address, readProvider }) {
       const router   = new ethers.Contract(ROUTER, ROUTER_ABI, signer);
       const weiA     = ethers.parseUnits(amtA, tokA.decimals);
       const weiB     = ethers.parseUnits(amtB, tokB.decimals);
-      const sl       = BigInt(Math.floor((1 - 0.5/100) * 10000));
-      const minA     = weiA * sl / 10000n;
-      const minB     = weiB * sl / 10000n;
       const deadline = Math.floor(Date.now()/1000) + 1200;
       const isNatA   = tokA.address === 'NATIVE';
       const isNatB   = tokB.address === 'NATIVE';
@@ -106,61 +143,129 @@ function AddPane({ signer, address, readProvider }) {
       let txr;
       if (isNatA) {
         await ensureAllowance(tokB, ROUTER, weiB, signer, address);
-        txr = await router.addLiquidityTHEO(toAddr(tokB), weiB, minB, minA, address, deadline, { value: weiA });
+        txr = await router.addLiquidityTHEO(toAddr(tokB), weiB, 0n, 0n, address, deadline, { value: weiA });
       } else if (isNatB) {
         await ensureAllowance(tokA, ROUTER, weiA, signer, address);
-        txr = await router.addLiquidityTHEO(toAddr(tokA), weiA, minA, minB, address, deadline, { value: weiB });
+        txr = await router.addLiquidityTHEO(toAddr(tokA), weiA, 0n, 0n, address, deadline, { value: weiB });
       } else {
         await ensureAllowance(tokA, ROUTER, weiA, signer, address);
         await ensureAllowance(tokB, ROUTER, weiB, signer, address);
-        txr = await router.addLiquidity(toAddr(tokA), toAddr(tokB), weiA, weiB, minA, minB, address, deadline);
+        txr = await router.addLiquidity(toAddr(tokA), toAddr(tokB), weiA, weiB, 0n, 0n, address, deadline);
       }
       setTx({ state: TX.MINING, hash: txr.hash, msg:'' });
       const receipt = await txr.wait();
       setTx({ state: TX.OK, hash: receipt.hash, msg: `Added ${amtA} ${tokA.symbol} + ${amtB} ${tokB.symbol}` });
-      setAmtA(''); setAmtB(''); setPoolInfo(null);
-      loadBal(tokA, setBalA); loadBal(tokB, setBalB);
+      setAmtA(''); setAmtB(''); setPoolInfo(null); setPct(10);
+      loadBal(tokA, setBalARaw, setBalA);
+      loadBal(tokB, setBalBRaw, setBalB);
     } catch(e) {
       setTx({ state: TX.ERR, hash:'', msg: e.reason || e.shortMessage || e.message });
     } finally { setBusy(false); }
   };
 
   const btnState = () => {
-    if (!address)              return ['CONNECT WALLET', 'outline'];
-    if (!amtA || !amtB)        return ['ENTER AMOUNTS',  'disabled'];
+    if (!address)      return ['CONNECT WALLET', 'outline'];
+    if (!amtA || !amtB) return ['ENTER AMOUNTS',  'disabled'];
     return [`ADD ${tokA.symbol} / ${tokB.symbol}`, 'primary'];
   };
   const [btnLabel, btnType] = btnState();
 
-  const selectTok = (side, tok) => {
-    if (side === 'A') { setTokA(tok); setAmtA(''); setAmtB(''); setPoolInfo(null); }
-    else              { setTokB(tok); setAmtA(''); setAmtB(''); setPoolInfo(null); }
+  const selectTok = (s, tok) => {
+    if (s === 'A') { setTokA(tok); setAmtA(''); setAmtB(''); setPoolInfo(null); setPct(10); }
+    else           { setTokB(tok); setAmtA(''); setAmtB(''); setPoolInfo(null); setPct(10); }
   };
+
+  const isNewPool = poolInfo?.isNew === true;
 
   return (
     <div style={S.card}>
       <div style={S.hdr}><span style={S.hdrTitle}>ADD LIQUIDITY</span></div>
       <div style={{ padding:'16px 18px' }}>
         <div style={S.infoBox}>
-          <b style={{ color:'#00d4ff' }}>Liquidity Provider</b> — earn <b style={{ color:'#00d4ff' }}>0.3%</b> of every swap, proportional to your share.
+          <b style={{ color:'#00d4ff' }}>Liquidity Provider</b> — earn{' '}
+          <b style={{ color:'#00d4ff' }}>0.3%</b> of every swap, proportional to your share.
         </div>
 
-        <LiqBox label="TOKEN A" bal={balA} amt={amtA} onAmt={handleAmtA} tok={tokA}
-          onTok={() => { setSide('A'); setTokModal(true); }} />
-        <div style={{ textAlign:'center', fontSize:22, color:'#00d4ff', padding:'4px 0', fontWeight:700 }}>+</div>
-        <LiqBox label="TOKEN B" bal={balB} amt={amtB} onAmt={v => setAmtB(v)} tok={tokB}
-          onTok={() => { setSide('B'); setTokModal(true); }} />
+        {/* TOKEN A */}
+        <LiqBox
+          label="TOKEN A" bal={balA} amt={amtA}
+          onAmt={handleAmtA} tok={tokA}
+          onTok={() => { setSide('A'); setTokModal(true); }}
+          readonly={false}
+        />
 
-        {poolInfo && (
-          <div style={S.routeBox}>
-            {poolInfo.isNew
-              ? <div style={{ color:'#00ff88', fontSize:12, fontWeight:700 }}>🆕 New Pool — you set the initial price</div>
-              : <><Row lbl="Rate" val={poolInfo.rate} /><Row lbl="Pool Share" val={poolInfo.share} /><Row lbl="LP Tokens (est.)" val={poolInfo.lpEst} /></>
-            }
+        {/* % slider — only for NEW pool */}
+        {isNewPool && (
+          <div style={S.pctSliderBox}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
+              <span style={{ fontSize:11, color:'#3d5a7a', fontWeight:700, letterSpacing:'.5px' }}>
+                USE % OF BALANCE
+              </span>
+              <span style={{ fontSize:13, fontWeight:700, color:'#00d4ff', fontFamily:"'IBM Plex Mono',monospace" }}>
+                {pct}%
+              </span>
+            </div>
+            <input
+              type="range" min="1" max="25" value={pct}
+              onChange={e => handlePct(Number(e.target.value))}
+              style={{ width:'100%', accentColor:'#00d4ff', cursor:'pointer', marginBottom:8 }}
+            />
+            <div style={{ display:'flex', gap:6 }}>
+              {[1,5,10,25].map(p => (
+                <button key={p}
+                  style={{ ...S.pctChip, ...(pct===p ? S.pctChipActive:{}) }}
+                  onClick={() => handlePct(p)}
+                >{p}%</button>
+              ))}
+            </div>
           </div>
         )}
 
-        <button style={{ ...S.actBtn, ...S[btnType+'Btn'] }} disabled={btnType==='disabled'||busy} onClick={doAdd}>
+        <div style={{ textAlign:'center', fontSize:22, color:'#00d4ff', padding:'4px 0', fontWeight:700 }}>+</div>
+
+        {/* TOKEN B */}
+        <LiqBox
+          label={isNewPool ? 'TOKEN B  (bebas isi harga)' : 'TOKEN B  (otomatis dari pool)'}
+          bal={balB} amt={amtB}
+          onAmt={handleAmtB}
+          tok={tokB}
+          onTok={() => { setSide('B'); setTokModal(true); }}
+          readonly={!isNewPool && poolInfo !== null}
+        />
+
+        {/* pool info */}
+        {poolInfo && (
+          <div style={S.routeBox}>
+            {isNewPool ? (
+              <div style={{ fontSize:12, lineHeight:1.7 }}>
+                <div style={{ color:'#00ff88', fontWeight:700, marginBottom:4 }}>🆕 Pool Baru</div>
+                <div style={{ color:'#6b8aaa' }}>
+                  Kamu yang menentukan harga awal.<br/>
+                  Masukkan berapa <b style={{ color:'#e2f0ff' }}>{tokB.symbol}</b> per{' '}
+                  <b style={{ color:'#e2f0ff' }}>{tokA.symbol}</b>.
+                </div>
+                {amtA && amtB && parseFloat(amtA)>0 && parseFloat(amtB)>0 && (
+                  <div style={{ marginTop:8, paddingTop:8, borderTop:'1px solid #132035' }}>
+                    <Row lbl="Harga awal" val={`1 ${tokA.symbol} = ${(parseFloat(amtB)/parseFloat(amtA)).toFixed(6)} ${tokB.symbol}`} />
+                    <Row lbl="Pool Share" val="100% (kamu LP pertama)" col="#00ff88" />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <Row lbl="Rate (pool)"     val={poolInfo.rate} />
+                <Row lbl="Pool Share (est.)" val={poolInfo.share} />
+                <Row lbl="LP Tokens (est.)" val={poolInfo.lpEst} />
+              </>
+            )}
+          </div>
+        )}
+
+        <button
+          style={{ ...S.actBtn, ...S[btnType+'Btn'] }}
+          disabled={btnType==='disabled' || busy}
+          onClick={doAdd}
+        >
           {busy ? <span style={S.btnSpin}/> : btnLabel}
         </button>
       </div>
@@ -295,16 +400,21 @@ function PositionsPane({ signer, address, readProvider }) {
 }
 
 // ─── sub-components ───────────────────────────────────
-function LiqBox({ label, bal, amt, onAmt, tok, onTok }) {
+function LiqBox({ label, bal, amt, onAmt, tok, onTok, readonly }) {
   return (
-    <div style={S.tbox}>
+    <div style={{ ...S.tbox, ...(readonly ? { opacity:.75 }:{}) }}>
       <div style={S.tboxTop}>
-        <span style={{ color:'#3d5a7a' }}>{label}</span>
+        <span style={{ color:'#3d5a7a', fontSize:11 }}>{label}</span>
         <span style={{ color:'#6b8aaa' }}>Balance: {bal}</span>
       </div>
       <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-        <input style={{ ...S.amtInp, color:'#e2f0ff' }} type="number" placeholder="0.0"
-          value={amt} onChange={e => onAmt(e.target.value)} />
+        <input
+          style={{ ...S.amtInp, color: readonly ? '#6b8aaa':'#e2f0ff', cursor: readonly?'not-allowed':'text' }}
+          type="number" placeholder="0.0"
+          value={amt}
+          onChange={e => !readonly && onAmt(e.target.value)}
+          readOnly={readonly}
+        />
         <button style={S.tokBtn} onClick={onTok}>
           <TokenIcon tok={tok} size={28}/>
           <span style={{ fontFamily:"'Unbounded',sans-serif", fontSize:13, fontWeight:700, color:'#e2f0ff' }}>{tok.symbol}</span>
@@ -350,8 +460,6 @@ function Row({ lbl, val, col='#e2f0ff' }) {
     </div>
   );
 }
-
-// ─── styles ───────────────────────────────────────────
 const S = {
   card:       { background:'#080f1a', border:'1px solid #1a2d4a', borderRadius:16, overflow:'hidden' },
   hdr:        { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 18px', borderBottom:'1px solid #132035' },
@@ -375,7 +483,10 @@ const S = {
   removeBtn:  { padding:'6px 14px', borderRadius:7, border:'1px solid #ff3b5c', background:'transparent', color:'#ff3b5c', fontFamily:"'IBM Plex Mono',monospace", fontSize:12, fontWeight:700, cursor:'pointer' },
   overlay:    { position:'fixed', inset:0, background:'rgba(4,7,13,.9)', backdropFilter:'blur(14px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center' },
   removeModal:{ background:'#080f1a', border:'1px solid #1a2d4a', borderRadius:16, width:380 },
-  pctBtn:     { flex:1, padding:7, borderRadius:7, border:'1px solid #132035', background:'#0c1624', color:'#6b8aaa', fontFamily:"'IBM Plex Mono',monospace", fontSize:12, fontWeight:700, cursor:'pointer' },
-  pctActive:  { borderColor:'#00d4ff', color:'#00d4ff', background:'rgba(0,212,255,.08)' },
-  spin2:      { width:28, height:28, border:'3px solid #132035', borderTopColor:'#00d4ff', borderRadius:'50%', animation:'spin .7s linear infinite', margin:'0 auto 12px' },
+  pctBtn:        { flex:1, padding:7, borderRadius:7, border:'1px solid #132035', background:'#0c1624', color:'#6b8aaa', fontFamily:"'IBM Plex Mono',monospace", fontSize:12, fontWeight:700, cursor:'pointer' },
+  pctActive:     { borderColor:'#00d4ff', color:'#00d4ff', background:'rgba(0,212,255,.08)' },
+  spin2:         { width:28, height:28, border:'3px solid #132035', borderTopColor:'#00d4ff', borderRadius:'50%', animation:'spin .7s linear infinite', margin:'0 auto 12px' },
+  pctSliderBox:  { background:'rgba(0,212,255,.04)', border:'1px solid rgba(0,212,255,.12)', borderRadius:10, padding:'12px 14px', margin:'4px 0 6px' },
+  pctChip:       { flex:1, padding:'6px 0', borderRadius:7, border:'1px solid #132035', background:'#080f1a', color:'#6b8aaa', fontFamily:"'IBM Plex Mono',monospace", fontSize:12, fontWeight:700, cursor:'pointer', transition:'.15s' },
+  pctChipActive: { borderColor:'#00d4ff', color:'#00d4ff', background:'rgba(0,212,255,.1)' },
 };
