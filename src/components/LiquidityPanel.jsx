@@ -9,18 +9,20 @@ import TokenModal from './TokenModal';
 import TxModal, { TX } from './TxModal';
 import TokenIcon from './TokenIcon';
 
-export default function LiquidityPanel({ signer, address, readProvider }) {
-  const [tab, setTab] = useState('add'); // 'add' | 'positions'
+export default function LiquidityPanel({ signer, address, readProvider, prefillTok, onPrefillUsed }) {
+  const [tab, setTab] = useState('add');
+
+  // Auto-switch to add tab when prefillTok arrives
+  useEffect(() => { if (prefillTok) setTab('add'); }, [prefillTok]);
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-      {/* tab switcher */}
       <div style={S.tabRow}>
-        <button style={{ ...S.tab, ...(tab==='add'      ? S.tabActive:{}) }} onClick={() => setTab('add')}>ADD</button>
-        <button style={{ ...S.tab, ...(tab==='positions'? S.tabActive:{}) }} onClick={() => setTab('positions')}>MY POSITIONS</button>
+        <button style={{ ...S.tab, ...(tab==='add'       ? S.tabActive:{}) }} onClick={() => setTab('add')}>ADD</button>
+        <button style={{ ...S.tab, ...(tab==='positions' ? S.tabActive:{}) }} onClick={() => setTab('positions')}>MY POSITIONS</button>
       </div>
 
-      {tab === 'add'       && <AddPane       signer={signer} address={address} readProvider={readProvider} />}
+      {tab === 'add'       && <AddPane       signer={signer} address={address} readProvider={readProvider} prefillTok={prefillTok} onPrefillUsed={onPrefillUsed} />}
       {tab === 'positions' && <PositionsPane signer={signer} address={address} readProvider={readProvider} />}
     </div>
   );
@@ -29,21 +31,40 @@ export default function LiquidityPanel({ signer, address, readProvider }) {
 // ══════════════════════════════════════════════════════
 //  ADD LIQUIDITY PANE
 // ══════════════════════════════════════════════════════
-function AddPane({ signer, address, readProvider }) {
+function AddPane({ signer, address, readProvider, prefillTok, onPrefillUsed }) {
   const [tokA,     setTokA]     = useState(TOKENS[0]);
   const [tokB,     setTokB]     = useState(TOKENS[2]);
   const [amtA,     setAmtA]     = useState('');
   const [amtB,     setAmtB]     = useState('');
-  const [balARaw,  setBalARaw]  = useState(0n);  // raw BigInt
+  const [balARaw,  setBalARaw]  = useState(0n);
   const [balBRaw,  setBalBRaw]  = useState(0n);
   const [balA,     setBalA]     = useState('—');
   const [balB,     setBalB]     = useState('—');
-  const [poolInfo, setPoolInfo] = useState(null); // null | { isNew, rate, share, lpEst }
-  const [pct,      setPct]      = useState(10);   // % slider for new pool (1-25)
+  const [poolInfo, setPoolInfo] = useState(null);
+  const [pct,      setPct]      = useState(10);
   const [tokModal, setTokModal] = useState(false);
   const [side,     setSide]     = useState('A');
   const [tx,       setTx]       = useState({ state: TX.IDLE, hash:'', msg:'' });
   const [busy,     setBusy]     = useState(false);
+
+  // Pre-fill Token B from scanner "Create Pool" click
+  useEffect(() => {
+    if (!prefillTok) return;
+    // Build a token object compatible with our system
+    const newTok = {
+      symbol:   prefillTok.symbol,
+      name:     prefillTok.name,
+      decimals: prefillTok.decimals,
+      address:  prefillTok.address,
+      color:    '#a0a0ff',
+      grad:     '135deg,#6060cc,#303090',
+      icon:     prefillTok.symbol.slice(0,1).toUpperCase(),
+    };
+    setTokA(TOKENS[0]); // THEO as token A
+    setTokB(newTok);    // user's token as token B
+    setAmtA(''); setAmtB(''); setPoolInfo(null); setPct(10);
+    onPrefillUsed?.();
+  }, [prefillTok, onPrefillUsed]);
 
   // ── load balance ──────────────────────────────────
   const loadBal = useCallback(async (tok, setRaw, setFmt) => {
