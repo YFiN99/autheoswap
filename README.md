@@ -1,6 +1,6 @@
 # AutheoSwap — Uniswap V2 DEX Frontend
 
-React app untuk berinteraksi dengan AutheoSwap di Autheo Testnet (Chain ID: 785).
+A React-based DEX interface for interacting with AutheoSwap on Autheo Testnet (Chain ID: 785).
 
 ## Contract Addresses
 
@@ -14,33 +14,45 @@ React app untuk berinteraksi dengan AutheoSwap di Autheo Testnet (Chain ID: 785)
 | WBTC     | `0xF79cd4BCB7986f6B9F14DA6a63FcC6Dccd08BeC5` |
 | WETH     | `0xa0a45220Af1874faD35ea8ea5d68B185a1A3b805` |
 
-## Cara Jalankan
+## Getting Started
 
 ```bash
 npm install
 npm start
 ```
 
-Buka http://localhost:3000
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Fitur
+## Features
 
-- ✅ Connect MetaMask + auto-add Autheo Testnet
-- ✅ Swap token (THEO ↔ WTHEO ↔ USDT ↔ USDC ↔ WBTC ↔ WETH)
-- ✅ Real-time price quote dari `getAmountsOut`
-- ✅ Price impact, minimum received, LP fee display
-- ✅ Slippage tolerance (0.1% / 0.5% / 1.0% / custom)
-- ✅ Add liquidity (token/token & THEO/token)
-- ✅ View semua LP positions kamu
-- ✅ Remove liquidity dengan slider %
-- ✅ Auto approve token sebelum transaksi
-- ✅ TX modal (pending → mining → success/error)
-- ✅ Link ke Autheo block explorer
+- ✅ MetaMask wallet connection with auto-add Autheo Testnet
+- ✅ Token swaps (THEO ↔ USDT ↔ USDC ↔ WBTC ↔ WETH)
+- ✅ Real-time price quotes via `getAmountsOut`
+- ✅ Price impact, minimum received & LP fee display
+- ✅ Slippage tolerance settings (0.1% / 0.5% / 1.0% / custom)
+- ✅ Add liquidity for token/token and THEO/token pairs
+- ✅ Auto-calculated paired amounts for existing pools
+- ✅ View all your LP positions
+- ✅ Remove liquidity with percentage slider
+- ✅ Wrap / Unwrap THEO ↔ WTHEO (always 1:1, no fee)
+- ✅ Auto token approval before transactions
+- ✅ Toast-style transaction notifications (no blocking modal)
+- ✅ Block explorer links for every transaction
 
-## Build Production
+## Network
+
+| Field | Value |
+|-------|-------|
+| Network Name | Autheo Testnet |
+| Chain ID | 785 |
+| Currency | THEO |
+| RPC URL | https://testnet-rpc1.autheo.com |
+| Explorer | https://testnet-explorer.autheo.com |
+
+## Production Build
 
 ```bash
 npm run build
 ```
 
-Output di folder `build/`, siap di-deploy ke Netlify / Vercel / hosting manapun.
+Output is in the `build/` folder — ready to deploy on Vercel, Netlify, or any static host.
