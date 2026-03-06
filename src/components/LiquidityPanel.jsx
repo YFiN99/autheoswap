@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import {
   TOKENS, FACTORY, ROUTER, WTHEO,
   FACTORY_ABI, PAIR_ABI, ROUTER_ABI, ERC20_ABI,
-  toAddr, fmtUnits, getTokenBalance, ensureAllowance,
+  toAddr, fmtUnits, getTokenBalance, ensureAllowance, fastGas, deadline,
 } from '../utils/config';
 import TokenModal from './TokenModal';
 import TxModal, { TX } from './TxModal';
@@ -136,21 +136,22 @@ function AddPane({ signer, address, readProvider }) {
       const router   = new ethers.Contract(ROUTER, ROUTER_ABI, signer);
       const weiA     = ethers.parseUnits(amtA, tokA.decimals);
       const weiB     = ethers.parseUnits(amtB, tokB.decimals);
-      const deadline = Math.floor(Date.now()/1000) + 1200;
+      const dl       = deadline();
       const isNatA   = tokA.address === 'NATIVE';
       const isNatB   = tokB.address === 'NATIVE';
+      const gas      = fastGas();
 
       let txr;
       if (isNatA) {
         await ensureAllowance(tokB, ROUTER, weiB, signer, address);
-        txr = await router.addLiquidityTHEO(toAddr(tokB), weiB, 0n, 0n, address, deadline, { value: weiA });
+        txr = await router.addLiquidityTHEO(toAddr(tokB), weiB, 0n, 0n, address, dl, { ...gas, value: weiA });
       } else if (isNatB) {
         await ensureAllowance(tokA, ROUTER, weiA, signer, address);
-        txr = await router.addLiquidityTHEO(toAddr(tokA), weiA, 0n, 0n, address, deadline, { value: weiB });
+        txr = await router.addLiquidityTHEO(toAddr(tokA), weiA, 0n, 0n, address, dl, { ...gas, value: weiB });
       } else {
         await ensureAllowance(tokA, ROUTER, weiA, signer, address);
         await ensureAllowance(tokB, ROUTER, weiB, signer, address);
-        txr = await router.addLiquidity(toAddr(tokA), toAddr(tokB), weiA, weiB, 0n, 0n, address, deadline);
+        txr = await router.addLiquidity(toAddr(tokA), toAddr(tokB), weiA, weiB, 0n, 0n, address, dl, gas);
       }
       setTx({ state: TX.MINING, hash: txr.hash, msg:'' });
       const receipt = await txr.wait();
@@ -321,22 +322,26 @@ function PositionsPane({ signer, address, readProvider }) {
     if (!signer || !removeTarget) return;
     const { pa, tok0, tok1, lpBal } = removeTarget;
     const burnLP  = lpBal * BigInt(removePct) / 100n;
-    const deadline= Math.floor(Date.now()/1000) + 1200;
+    const dl      = deadline();
     setTx({ state: TX.PENDING, hash:'', msg:'' });
     try {
-      const pair   = new ethers.Contract(pa, PAIR_ABI, signer);
-      const router = new ethers.Contract(ROUTER, ROUTER_ABI, signer);
+      const pair    = new ethers.Contract(pa, PAIR_ABI, signer);
+      const router  = new ethers.Contract(ROUTER, ROUTER_ABI, signer);
+      const gas     = fastGas();
       const allowed = await pair.allowance(address, ROUTER);
-      if (allowed < burnLP) { const t = await pair.approve(ROUTER, burnLP); await t.wait(); }
+      if (allowed < burnLP) {
+        const t = await pair.approve(ROUTER, burnLP, fastGas({ gasLimit: 100000n }));
+        await t.wait();
+      }
 
       const isWTHEO0 = tok0.address?.toLowerCase() === WTHEO.toLowerCase();
       const isWTHEO1 = tok1.address?.toLowerCase() === WTHEO.toLowerCase();
       let txr;
       if (isWTHEO0 || isWTHEO1) {
         const tokenAddr = isWTHEO0 ? tok1.address : tok0.address;
-        txr = await router.removeLiquidityTHEO(tokenAddr, burnLP, 0n, 0n, address, deadline);
+        txr = await router.removeLiquidityTHEO(tokenAddr, burnLP, 0n, 0n, address, dl, gas);
       } else {
-        txr = await router.removeLiquidity(tok0.address, tok1.address, burnLP, 0n, 0n, address, deadline);
+        txr = await router.removeLiquidity(tok0.address, tok1.address, burnLP, 0n, 0n, address, dl, gas);
       }
       setTx({ state: TX.MINING, hash: txr.hash, msg:'' });
       const receipt = await txr.wait();

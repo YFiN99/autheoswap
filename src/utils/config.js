@@ -21,7 +21,6 @@ export const TOKENS = [
   { symbol:'WETH',  name:'Wrapped Ether',    decimals:18, address:'0xa0a45220Af1874faD35ea8ea5d68B185a1A3b805', color:'#627eea', grad:'135deg,#627eea,#3a4ec8', icon:'Ξ' },
 ];
 
-// Returns the on-chain address (swaps NATIVE → WTHEO)
 export const toAddr = (tok) => tok.address === 'NATIVE' ? WTHEO : tok.address;
 
 // ── ABIs ──────────────────────────────────────────────
@@ -73,6 +72,9 @@ export function fmtUnits(wei, decimals, dp = 5) {
   } catch { return '0'; }
 }
 
+// Deadline 30 menit — beri ruang kalau network lambat
+export const deadline = () => Math.floor(Date.now() / 1000) + 1800;
+
 export async function getTokenBalance(tok, userAddr, provider) {
   try {
     if (tok.address === 'NATIVE') return await provider.getBalance(userAddr);
@@ -81,12 +83,38 @@ export async function getTokenBalance(tok, userAddr, provider) {
   } catch { return 0n; }
 }
 
+// ── Gas override — skip eth_estimateGas yang lambat ──
+// Set gasLimit langsung → MetaMask popup muncul lebih cepat
+export function fastGas(extraFields = {}) {
+  return {
+    gasLimit: 600000n,   // cukup untuk semua operasi DEX
+    ...extraFields,
+  };
+}
+
+// ── Allowance cache — hindari RPC call berulang ──────
+const _allowanceCache = new Map(); // key: `tokenAddr-spender-user`
+
 export async function ensureAllowance(tok, spender, amount, signer, userAddr) {
   if (tok.address === 'NATIVE') return;
+
+  const key = `${tok.address}-${spender}-${userAddr}`.toLowerCase();
+
+  // Pakai cache kalau sudah pernah approve MaxUint256
+  if (_allowanceCache.has(key)) return;
+
   const c = new ethers.Contract(tok.address, ERC20_ABI, signer);
   const allowed = await c.allowance(userAddr, spender);
-  if (allowed < amount) {
-    const tx = await c.approve(spender, ethers.MaxUint256);
-    await tx.wait();
+
+  if (allowed >= amount) {
+    // Kalau sudah approve MaxUint256, cache-kan agar tidak cek lagi
+    if (allowed >= ethers.MaxUint256 / 2n) _allowanceCache.set(key, true);
+    return;
   }
+
+  // Approve MaxUint256 dengan gasLimit langsung (skip estimateGas)
+  const tx = await c.approve(spender, ethers.MaxUint256, fastGas());
+  await tx.wait();
+  _allowanceCache.set(key, true);
 }
+

@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import {
   TOKENS, FACTORY, ROUTER, WTHEO,
   FACTORY_ABI, PAIR_ABI, ROUTER_ABI, ERC20_ABI,
-  toAddr, fmtUnits, getTokenBalance, ensureAllowance,
+  toAddr, fmtUnits, getTokenBalance, ensureAllowance, fastGas, deadline,
 } from '../utils/config';
 import TokenModal from './TokenModal';
 import TxModal, { TX } from './TxModal';
@@ -112,18 +112,19 @@ export default function SwapPanel({ signer, address, readProvider }) {
       const router  = new ethers.Contract(ROUTER, ROUTER_ABI, signer);
       const inWei   = ethers.parseUnits(amtIn, tokIn.decimals);
       const minWei  = ethers.parseUnits((parseFloat(amtOut) * (1 - slip/100)).toFixed(tokOut.decimals), tokOut.decimals);
-      const deadline= Math.floor(Date.now()/1000) + 1200;
+      const dl      = deadline();
       const path    = [toAddr(tokIn), toAddr(tokOut)];
       const isNatIn = tokIn.address  === 'NATIVE';
       const isNatOut= tokOut.address === 'NATIVE';
+      const gas     = fastGas();
 
       let tx;
       if (isNatIn) {
-        tx = await router.swapExactTHEOForTokens(minWei, path, address, deadline, { value: inWei });
+        tx = await router.swapExactTHEOForTokens(minWei, path, address, dl, { ...gas, value: inWei });
       } else {
         await ensureAllowance(tokIn, ROUTER, inWei, signer, address);
-        if (isNatOut)  tx = await router.swapExactTokensForTHEO(inWei, minWei, path, address, deadline);
-        else           tx = await router.swapExactTokensForTokens(inWei, minWei, path, address, deadline);
+        if (isNatOut)  tx = await router.swapExactTokensForTHEO(inWei, minWei, path, address, dl, gas);
+        else           tx = await router.swapExactTokensForTokens(inWei, minWei, path, address, dl, gas);
       }
 
       setTx({ state: TX.MINING, hash: tx.hash, msg:'' });
