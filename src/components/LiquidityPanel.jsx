@@ -291,35 +291,62 @@ function PositionsPane({ signer, address, readProvider }) {
   const load = useCallback(async () => {
     if (!address) return;
     setLoading(true);
+    setPositions([]);
+    const ALL_TOKS = [...TOKENS, TOK_WTHEO];
+    const findTok = (addr) => {
+      const t = ALL_TOKS.find(t => t.address.toLowerCase() === addr.toLowerCase());
+      if (t?.symbol === 'WTHEO') return { ...TOKENS[0] };
+      return t || { symbol: addr.slice(0,6)+'…', decimals:18, grad:'135deg,#333,#555', icon:'?' };
+    };
+
     try {
       const p       = readProvider();
       const factory = new ethers.Contract(FACTORY, FACTORY_ABI, p);
       const count   = Number(await factory.allPairsLength());
-      const result  = [];
-      for (let i = 0; i < Math.min(count, 50); i++) {
-        const pa    = await factory.allPairs(i);
-        const pair  = new ethers.Contract(pa, PAIR_ABI, p);
-        const lpBal = await pair.balanceOf(address);
-        if (lpBal === 0n) continue;
-        const t0a     = await pair.token0();
-        const t1a     = await pair.token1();
-        const [r0,r1] = await pair.getReserves();
-        const totalLP = await pair.totalSupply();
-        const ALL_TOKS = [...TOKENS, TOK_WTHEO];
-        const findTok = (addr) => {
-          const t = ALL_TOKS.find(t => t.address.toLowerCase() === addr.toLowerCase());
-          if (t?.symbol === 'WTHEO') return { ...TOKENS[0] }; // tampil sebagai THEO
-          return t || { symbol: addr.slice(0,6)+'…', decimals:18, grad:'135deg,#333,#555', icon:'?' };
-        };
-        const tok0 = findTok(t0a);
-        const tok1 = findTok(t1a);
-        const share   = Number(lpBal) * 100 / Number(totalLP);
-        const a0      = lpBal * r0 / totalLP;
-        const a1      = lpBal * r1 / totalLP;
-        result.push({ pa, tok0, tok1, rawAddr0: t0a, rawAddr1: t1a, lpBal, totalLP, share, a0, a1 });
-      }
-      setPositions(result);
-    } finally { setLoading(false); }
+
+      // Ambil semua pair addresses sekaligus (parallel)
+      const pairAddrs = await Promise.all(
+        Array.from({ length: Math.min(count, 50) }, (_, i) => factory.allPairs(i))
+      );
+
+      // Cek LP balance semua pairs parallel — skip yang 0
+      const balances = await Promise.all(
+        pairAddrs.map(pa =>
+          new ethers.Contract(pa, PAIR_ABI, p).balanceOf(address).catch(() => 0n)
+        )
+      );
+
+      // Filter hanya pair yang punya LP balance
+      const owned = pairAddrs.filter((_, i) => balances[i] > 0n);
+
+      if (owned.length === 0) { setPositions([]); return; }
+
+      // Load detail semua owned pairs parallel
+      const details = await Promise.all(
+        owned.map(async (pa) => {
+          try {
+            const pair    = new ethers.Contract(pa, PAIR_ABI, p);
+            const [t0a, t1a, reserves, totalLP, lpBal] = await Promise.all([
+              pair.token0(),
+              pair.token1(),
+              pair.getReserves(),
+              pair.totalSupply(),
+              pair.balanceOf(address),
+            ]);
+            const [r0, r1] = reserves;
+            const tok0  = findTok(t0a);
+            const tok1  = findTok(t1a);
+            const share = Number(lpBal) * 100 / Number(totalLP);
+            const a0    = lpBal * r0 / totalLP;
+            const a1    = lpBal * r1 / totalLP;
+            return { pa, tok0, tok1, rawAddr0: t0a, rawAddr1: t1a, lpBal, totalLP, share, a0, a1 };
+          } catch { return null; }
+        })
+      );
+
+      setPositions(details.filter(Boolean));
+    } catch { setPositions([]); }
+    finally   { setLoading(false); }
   }, [address, readProvider]);
 
   useEffect(() => { load(); }, [load]);
