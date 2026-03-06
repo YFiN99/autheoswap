@@ -1,52 +1,82 @@
-/* global BigInt */
-import React from 'react';
+// src/components/TxModal.jsx — Uniswap-style toast, no blocking overlay
+import { useEffect } from 'react';
 import { EXPLORER } from '../utils/config';
 
 export const TX = { IDLE:'idle', PENDING:'pending', MINING:'mining', OK:'ok', ERR:'err' };
 
 export default function TxModal({ state, hash, msg, onClose }) {
+  // Auto-dismiss on success after 5s
+  useEffect(() => {
+    if (state !== TX.OK) return;
+    const t = setTimeout(onClose, 5000);
+    return () => clearTimeout(t);
+  }, [state, onClose]);
+
   if (state === TX.IDLE) return null;
 
-  const body = {
-    [TX.PENDING]: () => <><Spin/><T>Confirm in wallet…</T><D>Check MetaMask</D></>,
-    [TX.MINING]:  () => <><Spin/><T>Broadcasting…</T><D>Waiting for block confirmation</D>{hash && <Hash h={hash}/>}</>,
-    [TX.OK]:      () => <><Big>✅</Big><T>Success!</T><D style={{color:'#00ff88'}}>{msg}</D>{hash && <Hash h={hash} label="View on Explorer ↗"/>}<Btn onClick={onClose}>Close</Btn></>,
-    [TX.ERR]:     () => <><Big>❌</Big><T>Failed</T><D style={{color:'#ff3b5c'}}>{(msg||'').slice(0,200)}</D><Btn onClick={onClose}>Close</Btn></>,
+  const cfg = {
+    [TX.PENDING]: { icon:<Spin/>,  title:'Confirm in wallet', sub:'Check MetaMask',            accent:'#00d4ff', border:'#1a2d4a' },
+    [TX.MINING]:  { icon:<Spin/>,  title:'Transaction sent',  sub:'Waiting for confirmation…', accent:'#00d4ff', border:'#1a2d4a', link:hash },
+    [TX.OK]:      { icon:<Check/>, title:'Success',           sub:msg,                         accent:'#00ff88', border:'rgba(0,255,136,.2)', link:hash, closeable:true },
+    [TX.ERR]:     { icon:<Err/>,   title:'Failed',            sub:(msg||'').slice(0,120),        accent:'#ff3b5c', border:'rgba(255,59,92,.2)', closeable:true },
   }[state];
 
   return (
-    <div style={S.overlay} onClick={state === TX.OK || state === TX.ERR ? onClose : undefined}>
-      <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={S.hdr}>
-          <span style={S.title}>TRANSACTION</span>
-          <button style={S.x} onClick={onClose}>✕</button>
+    <div style={S.wrap}>
+      <div style={{ ...S.toast, borderColor: cfg.border }}>
+        <div style={S.track}>
+          <div style={{
+            ...S.bar,
+            background: cfg.accent,
+            ...(state === TX.OK  ? S.shrink : {}),
+            ...(state === TX.ERR ? { width:'100%', animation:'none' } : {}),
+          }}/>
         </div>
-        <div style={{ padding:'28px 20px', textAlign:'center' }}>{body()}</div>
+        <div style={S.body}>
+          <div style={{ flexShrink:0, marginTop:1 }}>{cfg.icon}</div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ ...S.title, color: cfg.accent }}>{cfg.title}</div>
+            {cfg.sub && <div style={S.sub}>{cfg.sub}</div>}
+            {cfg.link && (
+              <button style={S.link} onClick={() => window.open(`${EXPLORER}/tx/${cfg.link}`, '_blank')}>
+                View on Explorer ↗
+              </button>
+            )}
+          </div>
+          {cfg.closeable && <button style={S.x} onClick={onClose}>✕</button>}
+        </div>
       </div>
     </div>
   );
 }
 
-const Spin = () => <div style={S.spin}/>;
-const Big  = ({ children }) => <div style={{ fontSize:48, marginBottom:14 }}>{children}</div>;
-const T    = ({ children }) => <div style={S.t}>{children}</div>;
-const D    = ({ children, style }) => <div style={{ ...S.d, ...style }}>{children}</div>;
-const Hash = ({ h, label }) => (
-  <div style={S.hash} onClick={() => window.open(`${EXPLORER}/tx/${h}`, '_blank')}>
-    {label || h}
+const Spin  = () => <div style={S.spin}/>;
+const Check = () => (
+  <div style={{ ...S.circle, background:'rgba(0,255,136,.12)', border:'1.5px solid #00ff88' }}>
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+      <path d="M2 6.5l3.5 3.5 5.5-6" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
   </div>
 );
-const Btn  = ({ children, onClick }) => <button style={S.btn} onClick={onClick}>{children}</button>;
+const Err = () => (
+  <div style={{ ...S.circle, background:'rgba(255,59,92,.12)', border:'1.5px solid #ff3b5c' }}>
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+      <path d="M1.5 1.5l8 8M9.5 1.5l-8 8" stroke="#ff3b5c" strokeWidth="2" strokeLinecap="round"/>
+    </svg>
+  </div>
+);
 
 const S = {
-  overlay: { position:'fixed',inset:0,background:'rgba(4,7,13,.9)',backdropFilter:'blur(14px)',zIndex:600,display:'flex',alignItems:'center',justifyContent:'center' },
-  modal:   { background:'#080f1a',border:'1px solid #1a2d4a',borderRadius:16,width:360,overflow:'hidden' },
-  hdr:     { display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 18px',borderBottom:'1px solid #132035' },
-  title:   { fontFamily:"'Unbounded',sans-serif",fontSize:13,fontWeight:700,color:'#e2f0ff' },
-  x:       { background:'#0c1624',border:'1px solid #132035',borderRadius:7,width:28,height:28,cursor:'pointer',color:'#6b8aaa',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center' },
-  spin:    { width:48,height:48,border:'3px solid #1a2d4a',borderTopColor:'#00d4ff',borderRadius:'50%',animation:'spin .7s linear infinite',margin:'0 auto 20px' },
-  t:       { fontFamily:"'Unbounded',sans-serif",fontSize:18,fontWeight:700,marginBottom:8,color:'#e2f0ff' },
-  d:       { fontSize:13,color:'#6b8aaa',lineHeight:1.7,marginBottom:14 },
-  hash:    { background:'#0c1624',border:'1px solid #1a2d4a',borderRadius:9,padding:'10px 14px',fontSize:11,color:'#00d4ff',wordBreak:'break-all',cursor:'pointer',marginBottom:14 },
-  btn:     { width:'100%',padding:'13px',border:'none',borderRadius:10,background:'linear-gradient(135deg,#00d4ff,#0094cc)',color:'#04070d',fontFamily:"'Unbounded',sans-serif",fontSize:13,fontWeight:700,cursor:'pointer' }
+  wrap:   { position:'fixed', bottom:24, right:24, zIndex:999, width:300, pointerEvents:'none' },
+  toast:  { background:'#080f1a', border:'1px solid', borderRadius:14, overflow:'hidden', boxShadow:'0 8px 40px rgba(0,0,0,.6)', pointerEvents:'all', animation:'toastIn .3s cubic-bezier(.34,1.4,.64,1)' },
+  track:  { height:3, background:'#0c1624', overflow:'hidden' },
+  bar:    { height:'100%', width:'55%', animation:'barPulse 1.4s ease-in-out infinite' },
+  shrink: { width:'100%', animation:'barShrink 5s linear forwards' },
+  body:   { display:'flex', alignItems:'flex-start', gap:11, padding:'13px 14px 14px' },
+  title:  { fontFamily:"'Unbounded',sans-serif", fontSize:11, fontWeight:700, letterSpacing:'.3px', marginBottom:3 },
+  sub:    { fontSize:12, color:'#6b8aaa', lineHeight:1.5, wordBreak:'break-word' },
+  link:   { background:'none', border:'none', padding:0, marginTop:5, fontSize:11, color:'#00d4ff', cursor:'pointer', fontFamily:"'IBM Plex Mono',monospace", display:'block' },
+  x:      { background:'none', border:'none', color:'#3d5a7a', fontSize:14, cursor:'pointer', padding:0, flexShrink:0, marginTop:1, lineHeight:1 },
+  circle: { width:30, height:30, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center' },
+  spin:   { width:30, height:30, border:'2.5px solid #1a2d4a', borderTopColor:'#00d4ff', borderRadius:'50%', animation:'spin .7s linear infinite' },
 };

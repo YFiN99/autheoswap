@@ -3,11 +3,11 @@
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 
 :root {
-  --bg:      #04070d;
-  --card:    #080f1a;
-  --card2:   #0c1624;
-  --b1:      #132035;
-  --b2:      #1a2d4a;
+  --bg:     #04070d;
+  --card:   #080f1a;
+  --card2:  #0c1624;
+  --b1:     #132035;
+  --b2:     #1a2d4a;
   --accent: #00d4ff;
   --green:  #00ff88;
   --red:    #ff3b5c;
@@ -112,7 +112,7 @@ body::after {
   font-size:12px; font-weight:700; letter-spacing:.5px;
   cursor:pointer; transition:.2s;
 }
-.connect-btn:hover      { background:var(--accent); color:var(--bg); }
+.connect-btn:hover     { background:var(--accent); color:var(--bg); }
 .connect-btn.connected { border-color:var(--green); color:var(--green); }
 .connect-btn.connected:hover { background:var(--green); color:var(--bg); }
 
@@ -133,6 +133,9 @@ body::after {
 @keyframes spin      { to { transform:rotate(360deg); } }
 @keyframes gridShift { to { background-position:52px 52px; } }
 @keyframes glowMove  { to { transform:translate(75vw, 75vh); } }
+@keyframes toastIn   { from { transform:translateX(110%); opacity:0; } to { transform:none; opacity:1; } }
+@keyframes barPulse  { 0%,100% { transform:translateX(-100%); } 50% { transform:translateX(200%); } }
+@keyframes barShrink { from { width:100%; } to { width:0%; } }
 
 /* RESET */
 button { font-family:inherit; }
