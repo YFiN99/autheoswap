@@ -1,4 +1,4 @@
-// src/components/DashboardPanel.jsx
+// src/components/DashboardPanel.jsx v2
 // Memanfaatkan Autheo Explorer API (Blockscout-compatible)
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
