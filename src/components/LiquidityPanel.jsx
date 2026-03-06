@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import {
   TOKENS, FACTORY, ROUTER, WTHEO,
   FACTORY_ABI, PAIR_ABI, ROUTER_ABI, ERC20_ABI,
-  toAddr, fmtUnits, getTokenBalance, ensureAllowance, fastGas, deadline,
+  toAddr, fmtUnits, getTokenBalance, ensureAllowance, fastGas, deadline, TOK_WTHEO,
 } from '../utils/config';
 import TokenModal from './TokenModal';
 import TxModal, { TX } from './TxModal';
@@ -305,12 +305,18 @@ function PositionsPane({ signer, address, readProvider }) {
         const t1a     = await pair.token1();
         const [r0,r1] = await pair.getReserves();
         const totalLP = await pair.totalSupply();
-        const tok0    = TOKENS.find(t => t.address.toLowerCase() === t0a.toLowerCase()) || { symbol:t0a.slice(0,8), decimals:18, grad:'135deg,#333,#555', icon:'?' };
-        const tok1    = TOKENS.find(t => t.address.toLowerCase() === t1a.toLowerCase()) || { symbol:t1a.slice(0,8), decimals:18, grad:'135deg,#333,#555', icon:'?' };
+        const ALL_TOKS = [...TOKENS, TOK_WTHEO];
+        const findTok = (addr) => {
+          const t = ALL_TOKS.find(t => t.address.toLowerCase() === addr.toLowerCase());
+          if (t?.symbol === 'WTHEO') return { ...TOKENS[0] }; // tampil sebagai THEO
+          return t || { symbol: addr.slice(0,6)+'…', decimals:18, grad:'135deg,#333,#555', icon:'?' };
+        };
+        const tok0 = findTok(t0a);
+        const tok1 = findTok(t1a);
         const share   = Number(lpBal) * 100 / Number(totalLP);
         const a0      = lpBal * r0 / totalLP;
         const a1      = lpBal * r1 / totalLP;
-        result.push({ pa, tok0, tok1, lpBal, totalLP, share, a0, a1, t0a, t1a });
+        result.push({ pa, tok0, tok1, rawAddr0: t0a, rawAddr1: t1a, lpBal, totalLP, share, a0, a1 });
       }
       setPositions(result);
     } finally { setLoading(false); }
@@ -320,7 +326,7 @@ function PositionsPane({ signer, address, readProvider }) {
 
   const doRemove = async () => {
     if (!signer || !removeTarget) return;
-    const { pa, tok0, tok1, lpBal } = removeTarget;
+    const { pa, tok0, tok1, rawAddr0, rawAddr1, lpBal } = removeTarget;
     const burnLP  = lpBal * BigInt(removePct) / 100n;
     const dl      = deadline();
     setTx({ state: TX.PENDING, hash:'', msg:'' });
@@ -334,14 +340,16 @@ function PositionsPane({ signer, address, readProvider }) {
         await t.wait();
       }
 
-      const isWTHEO0 = tok0.address?.toLowerCase() === WTHEO.toLowerCase();
-      const isWTHEO1 = tok1.address?.toLowerCase() === WTHEO.toLowerCase();
+      // pakai rawAddr (address asli on-chain) bukan tok.address yang sudah di-remap
+      const isWTHEO0 = rawAddr0?.toLowerCase() === WTHEO.toLowerCase();
+      const isWTHEO1 = rawAddr1?.toLowerCase() === WTHEO.toLowerCase();
       let txr;
       if (isWTHEO0 || isWTHEO1) {
-        const tokenAddr = isWTHEO0 ? tok1.address : tok0.address;
+        // removeLiquidityTHEO: unwrap WTHEO → THEO otomatis
+        const tokenAddr = isWTHEO0 ? rawAddr1 : rawAddr0;
         txr = await router.removeLiquidityTHEO(tokenAddr, burnLP, 0n, 0n, address, dl, gas);
       } else {
-        txr = await router.removeLiquidity(tok0.address, tok1.address, burnLP, 0n, 0n, address, dl, gas);
+        txr = await router.removeLiquidity(rawAddr0, rawAddr1, burnLP, 0n, 0n, address, dl, gas);
       }
       setTx({ state: TX.MINING, hash: txr.hash, msg:'' });
       const receipt = await txr.wait();

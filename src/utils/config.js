@@ -12,14 +12,18 @@ export const WTHEO   = '0x9c52C2fFA611066858Cd2d8DB724c659B561c41D';
 export const ROUTER  = '0xd8A7cEc4c9FCB80ab393e9936aD1C01dbE6CeDCB';
 
 // ── Token list ────────────────────────────────────────
+// WTHEO disembunyikan dari UI — Router otomatis wrap THEO saat swap
+// User hanya perlu THEO, tidak perlu lihat WTHEO
 export const TOKENS = [
   { symbol:'THEO',  name:'Autheo',           decimals:18, address:'NATIVE',                                     color:'#00d4ff', grad:'135deg,#00d4ff,#005f99', icon:'T' },
-  { symbol:'WTHEO', name:'Wrapped THEO',     decimals:18, address:'0x9c52C2fFA611066858Cd2d8DB724c659B561c41D', color:'#00b4d8', grad:'135deg,#00b4d8,#00607a', icon:'W' },
   { symbol:'USDT',  name:'Tether USD',       decimals:6,  address:'0x6145F2411f9b94E7063f28971a174dcCD3532bEe', color:'#26a17b', grad:'135deg,#26a17b,#1a6b52', icon:'₮' },
   { symbol:'USDC',  name:'USD Coin',         decimals:6,  address:'0x9Df70Dd5F5BD34bC8FA598D18737935cAead7124', color:'#2775ca', grad:'135deg,#2775ca,#1a58a0', icon:'$' },
   { symbol:'WBTC',  name:'Wrapped Bitcoin',  decimals:8,  address:'0xF79cd4BCB7986f6B9F14DA6a63FcC6Dccd08BeC5', color:'#f7931a', grad:'135deg,#f7931a,#c06010', icon:'₿' },
   { symbol:'WETH',  name:'Wrapped Ether',    decimals:18, address:'0xa0a45220Af1874faD35ea8ea5d68B185a1A3b805', color:'#627eea', grad:'135deg,#627eea,#3a4ec8', icon:'Ξ' },
 ];
+
+// WTHEO tetap tersedia untuk keperluan internal (liquidity, wrap panel)
+export const TOK_WTHEO = { symbol:'WTHEO', name:'Wrapped THEO', decimals:18, address:'0x9c52C2fFA611066858Cd2d8DB724c659B561c41D', color:'#00b4d8', grad:'135deg,#00b4d8,#00607a', icon:'W' };
 
 export const toAddr = (tok) => tok.address === 'NATIVE' ? WTHEO : tok.address;
 
