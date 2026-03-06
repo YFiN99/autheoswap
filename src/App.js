@@ -56,6 +56,7 @@ export default function App() {
         {address && (
           <TokenScanner
             address={address}
+            signer={signer}
             readProvider={readProvider}
             onCreatePool={handleCreatePool}
           />

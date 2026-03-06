@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { EXPLORER, FACTORY, WTHEO, FACTORY_ABI, fmtUnits } from '../utils/config';
+import TokenMetadataUpload from './TokenMetadataUpload';
 
 const API = `${EXPLORER}/api/v2`;
 
@@ -14,10 +15,11 @@ async function apiFetch(path) {
 }
 
 // ── main component ────────────────────────────────────
-export default function TokenScanner({ address, readProvider, onCreatePool }) {
+export default function TokenScanner({ address, readProvider, onCreatePool, signer }) {
   const [unlistedTokens, setUnlisted] = useState([]);
   const [dismissed,      setDismissed] = useState({});
   const [expanded,       setExpanded]  = useState(false);
+  const [uploadTarget,   setUploadTarget] = useState(null); // tok to upload metadata
   const scanned = useRef(false);
 
   const scan = useCallback(async () => {
@@ -99,6 +101,7 @@ export default function TokenScanner({ address, readProvider, onCreatePool }) {
               key={tok.address}
               tok={tok}
               onCreatePool={() => onCreatePool(tok)}
+              onUploadMeta={() => setUploadTarget(tok)}
               onDismiss={() => setDismissed(d => ({ ...d, [tok.address]: true }))}
             />
           ))}
@@ -107,12 +110,22 @@ export default function TokenScanner({ address, readProvider, onCreatePool }) {
           </div>
         </div>
       )}
+
+      {/* upload metadata modal */}
+      {uploadTarget && (
+        <TokenMetadataUpload
+          tok={uploadTarget}
+          signer={signer}
+          onClose={() => setUploadTarget(null)}
+          onSaved={() => setUploadTarget(null)}
+        />
+      )}
     </div>
   );
 }
 
 // ── single token row ──────────────────────────────────
-function TokenRow({ tok, onCreatePool, onDismiss }) {
+function TokenRow({ tok, onCreatePool, onUploadMeta, onDismiss }) {
   const fmt = fmtUnits(tok.balance, tok.decimals);
 
   return (
@@ -144,6 +157,9 @@ function TokenRow({ tok, onCreatePool, onDismiss }) {
       <div style={{ display:'flex', gap:6, flexShrink:0 }}>
         <button style={S.createBtn} onClick={onCreatePool}>
           + Create Pool
+        </button>
+        <button style={S.logoBtn} onClick={onUploadMeta} title="Upload token logo & description">
+          🖼
         </button>
         <button style={S.dismissBtn} onClick={onDismiss} title="Dismiss">
           ✕
@@ -255,6 +271,7 @@ const S = {
     fontFamily:   "'Unbounded',sans-serif",
     whiteSpace:   'nowrap',
   },
+  logoBtn:    { background:'#0c1624', border:'1px solid #1a2d4a', borderRadius:8, padding:'7px 10px', fontSize:14, color:'#6b8aaa', cursor:'pointer' },
   dismissBtn: {
     background:   '#0c1624',
     border:       '1px solid #1a2d4a',
